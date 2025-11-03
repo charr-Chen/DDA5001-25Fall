@@ -258,6 +258,12 @@ t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
+
+# ---- loss history for plotting ----
+iter_hist = []
+train_loss_hist = []
+val_loss_hist = []
+
 while True:
 
     # determine and set the learning rate for this iteration
@@ -269,6 +275,9 @@ while True:
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        iter_hist.append(iter_num)
+        train_loss_hist.append(float(losses['train']))
+        val_loss_hist.append(float(losses['val']))
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -337,6 +346,25 @@ while True:
     # termination conditions
     if iter_num > max_iters:
         break
+
+# ================== save curves ==================
+if master_process:
+    os.makedirs(out_dir, exist_ok=True)
+
+    plt.figure()
+    plt.plot(iter_hist, train_loss_hist, label="train loss")
+    plt.plot(iter_hist, val_loss_hist,   label="validation loss")
+    plt.xlabel("iteration")
+    plt.ylabel("loss")
+    plt.title("Training / Validation Loss")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    png_path = os.path.join(out_dir, "loss_curves.png")
+    plt.savefig(png_path)
+    plt.close()
+
+    print(f"[loss curves saved] {csv_path} , {png_path}")
 
 if ddp:
     destroy_process_group()
