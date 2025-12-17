@@ -148,17 +148,29 @@ def main(
         "amc": "math-ai/amc23",
         "aime": "math-ai/aime25",
     }
-    # Resolve the short name to the full path.
-    # If the user provides a full path (not in the map), it uses the input as is.
-    dataset_path = dataset_map.get(dataset.lower(), dataset)
-    print(f"[Rank {global_dp_rank}] Loading dataset: {dataset} -> {dataset_path}")
-    # === MAPPING LOGIC END ===
+    # Prefer local datasets under p3/data/*/test.jsonl if available.
+    p3_root = Path(__file__).resolve().parents[1]
+    local_test_files = {
+        "math": p3_root / "data" / "math500" / "test.jsonl",
+        "aime": p3_root / "data" / "aime25" / "test.jsonl",
+        # Optional: include AMC if you download it locally later.
+        "amc": p3_root / "data" / "amc23" / "test.jsonl",
+    }
 
-    # 1. Load test set using the resolved path
-    ds = load_dataset(dataset_path, split="test")
+    key = dataset.lower()
+    local_file = local_test_files.get(key)
 
-    # Use the resolved path name for schema detection
-    name = dataset_path.lower()
+    if local_file is not None and local_file.is_file():
+        print(f"[Rank {global_dp_rank}] Loading LOCAL dataset: {key} -> {local_file}")
+        ds = load_dataset("json", data_files={"test": str(local_file)}, split="test")
+        name = local_file.parent.name.lower()  # e.g., math500 / aime25 / amc23
+    else:
+        # Resolve the short name to the full path.
+        # If the user provides a full path (not in the map), it uses the input as is.
+        dataset_path = dataset_map.get(key, dataset)
+        print(f"[Rank {global_dp_rank}] Loading REMOTE dataset: {dataset} -> {dataset_path}")
+        ds = load_dataset(dataset_path, split="test")
+        name = dataset_path.lower()
 
     if name.endswith("math500") or "math500" in name:
         problems = ds["problem"]
@@ -301,7 +313,7 @@ def main(
                         "sample_id": sample_id,  # which completion for this problem
                         "dp_rank": global_dp_rank,
                         "problem": batch_problems[j],
-                        "gold": batch_gold[j],
+                        "gold": str(batch_gold[j]),  # ensure numeric answers serialize cleanly
                         "answer": gen_text,
                     }
                     f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
