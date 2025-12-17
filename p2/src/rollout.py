@@ -48,7 +48,7 @@ def main(model_name, output_filename, lora_path=None):
     # Prepare chat-style prompts
     prompt_chats = [
         [
-            {"role": "user", "content": p + XXX}
+            {"role": "user", "content": p + "\nPlease reason step by step, and put your final answer within \\boxed{}."}
         ]
         for p in prompts
     ]
@@ -61,7 +61,7 @@ def main(model_name, output_filename, lora_path=None):
             tokenize=False,
             enable_thinking=False,
         )
-        for XXX in XXX
+        for XXX in prompt_chats
     ]
 
     # 3. Create Transformers Model with conditional LoRA support
